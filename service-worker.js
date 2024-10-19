@@ -1,5 +1,23 @@
-const CACHE_NAME = 'my-site-cache-v1.1';
-const STATIC_CACHE_NAME = 'my-site-static-v1.1';
+const CACHE_NAME = 'my-site-cache-v1.3';
+const STATIC_CACHE_NAME = 'my-site-static-v1.3';
+const CACHE_EXPIRATION = 25 * 60 * 60 * 1000; // 25小时,以毫秒为单位
+
+// 辅助函数:获取缓存的时间戳
+function getCacheTimestamp(cacheName) {
+    return caches.open(cacheName).then(cache => {
+        return cache.match('__TIMESTAMP__').then(response => {
+            return response ? response.text() : null;
+        });
+    });
+}
+
+// 辅助函数:设置缓存的时间戳
+function setCacheTimestamp(cacheName) {
+    return caches.open(cacheName).then(cache => {
+        const timestamp = Date.now().toString();
+        return cache.put('__TIMESTAMP__', new Response(timestamp));
+    });
+}
 
 // 静态资源缓存
 self.addEventListener('install', function(event) {
@@ -11,11 +29,10 @@ self.addEventListener('install', function(event) {
                 '/wp-includes/css/dist/block-library/style.min.css',
                 '/wp-includes/js/jquery/jquery.min.js',
                 // 可以添加其他你确定要缓存的特定资源
-            ]);
+            ]).then(() => setCacheTimestamp(STATIC_CACHE_NAME));
         })
     );
 });
-
 
 // 动态缓存策略
 self.addEventListener('fetch', function(event) {
@@ -27,38 +44,36 @@ self.addEventListener('fetch', function(event) {
         return;
     }
 
-
     event.respondWith(
-        caches.match(event.request).then(function(response) {
-            if (response) {
-		console.log('Serving from cache:', event.request.url);
-                return response; // 如果在缓存中找到响应，则返回缓存的版本
+        caches.match(event.request).then(function(cachedResponse) {
+            const fetchPromise = fetch(event.request).then(function(networkResponse) {
+                // 如果网络请求成功,更新缓存
+                if (networkResponse && networkResponse.status === 200) {
+                    const cacheName = event.request.url.match(/\.(js|css|svg|png|jpg|jpeg|gif|ico)$/)
+                        ? STATIC_CACHE_NAME
+                        : CACHE_NAME;
+                    
+                    caches.open(cacheName).then(function(cache) {
+                        cache.put(event.request, networkResponse.clone());
+                        console.log('Updated cached resource:', event.request.url);
+                        setCacheTimestamp(cacheName);
+                    });
+                }
+                return networkResponse;
+            }).catch(() => {
+                // 如果网络请求失败,返回缓存的响应(如果存在)
+                return cachedResponse;
+            });
+
+            // 如果有缓存的响应,立即返回并在后台更新
+            if (cachedResponse) {
+                console.log('Serving from cache while revalidating:', event.request.url);
+                event.waitUntil(fetchPromise);
+                return cachedResponse;
             }
 
-            return fetch(event.request).then(function(response) {
-                // 检查是否是有效的响应
-                if (!response || response.status !== 200 || response.type !== 'basic') {
-                    return response;
-                }
-
-                // 克隆响应。因为响应是数据流，主体只能使用一次。
-                var responseToCache = response.clone();
-
-                // 检查是否是静态资源
-                if (event.request.url.match(/\.(js|css|svg|png|jpg|jpeg|gif|ico)$/)) {
-                    caches.open(STATIC_CACHE_NAME).then(function(cache) {
-                        cache.put(event.request, responseToCache);
-			console.log('Cached new static resource:', event.request.url);
-                    });
-                } else {
-                    caches.open(CACHE_NAME).then(function(cache) {
-                        cache.put(event.request, responseToCache);
-			console.log('Cached new resource:', event.request.url);
-                    });
-                }
-
-                return response;
-            });
+            // 如果没有缓存的响应,等待网络请求
+            return fetchPromise;
         })
     );
 });
