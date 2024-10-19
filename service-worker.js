@@ -1,5 +1,5 @@
-const CACHE_NAME = 'my-site-cache-v1.3';
-const STATIC_CACHE_NAME = 'my-site-static-v1.3';
+const CACHE_NAME = 'my-site-cache-v1.5';
+const STATIC_CACHE_NAME = 'my-site-static-v1.5';
 const CACHE_EXPIRATION = 25 * 60 * 60 * 1000; // 25小时,以毫秒为单位
 
 // 辅助函数:获取缓存的时间戳
@@ -47,32 +47,33 @@ self.addEventListener('fetch', function(event) {
     event.respondWith(
         caches.match(event.request).then(function(cachedResponse) {
             const fetchPromise = fetch(event.request).then(function(networkResponse) {
+                // 克隆网络响应
+                const responseToCache = networkResponse.clone();
+                
                 // 如果网络请求成功,更新缓存
-                if (networkResponse && networkResponse.status === 200) {
+                if (responseToCache && responseToCache.status === 200) {
                     const cacheName = event.request.url.match(/\.(js|css|svg|png|jpg|jpeg|gif|ico)$/)
                         ? STATIC_CACHE_NAME
                         : CACHE_NAME;
                     
                     caches.open(cacheName).then(function(cache) {
-                        cache.put(event.request, networkResponse.clone());
+                        cache.put(event.request, responseToCache);
                         console.log('Updated cached resource:', event.request.url);
                         setCacheTimestamp(cacheName);
                     });
                 }
                 return networkResponse;
-            }).catch(() => {
-                // 如果网络请求失败,返回缓存的响应(如果存在)
-                return cachedResponse;
             });
 
             // 如果有缓存的响应,立即返回并在后台更新
             if (cachedResponse) {
                 console.log('Serving from cache while revalidating:', event.request.url);
+                // 使用 event.waitUntil 来确保 Service Worker 不会在后台更新完成之前终止
                 event.waitUntil(fetchPromise);
                 return cachedResponse;
             }
 
-            // 如果没有缓存的响应,等待网络请求
+            // 如果没有缓存的响应,返回网络请求结果
             return fetchPromise;
         })
     );
