@@ -2,7 +2,7 @@
 /*
 Plugin Name: My SW Cache Plugin
 Description: Adds local caching to the website using a Service Worker
-Version: 1.1
+Version: 1.5
 Author: Halo Master 
 */
 
