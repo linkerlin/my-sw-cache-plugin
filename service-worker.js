@@ -44,9 +44,15 @@ self.addEventListener('fetch', function(event) {
         return;
     }
     
-    // 添加新的检查：排除 WordPress AJAX 请求
+    // 修改检查逻辑：只排除特定的 WordPress AJAX 请求
     if (event.request.url.includes('wp-admin/admin-ajax.php')) {
-        return fetch(event.request);
+        // 允许缓存 get_comment_details 请求
+        if (event.request.url.includes('action=get_comment_details')) {
+            // 继续执行缓存逻辑
+        } else {
+            // 其他 admin-ajax 请求不缓存
+            return fetch(event.request);
+        }
     }
 
     event.respondWith(
