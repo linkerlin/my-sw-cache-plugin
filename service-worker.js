@@ -43,6 +43,11 @@ self.addEventListener('fetch', function(event) {
     if (event.request.method !== 'GET') {
         return;
     }
+    
+    // 添加新的检查：排除 WordPress AJAX 请求
+    if (event.request.url.includes('wp-admin/admin-ajax.php')) {
+        return fetch(event.request);
+    }
 
     event.respondWith(
         caches.match(event.request).then(function(cachedResponse) {
